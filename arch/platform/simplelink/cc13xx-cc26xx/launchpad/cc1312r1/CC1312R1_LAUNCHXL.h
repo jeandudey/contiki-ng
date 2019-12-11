@@ -137,12 +137,12 @@ extern const PIN_Config BoardGpioInitTable[];
 #define CC1312R1_LAUNCHXL_SPI1_CSN              PIN_UNASSIGNED
 
 /* UART Board */
-#define CC1312R1_LAUNCHXL_UART0_RX              IOID_2          /* RXD */
-#define CC1312R1_LAUNCHXL_UART0_TX              IOID_3          /* TXD */
-#define CC1312R1_LAUNCHXL_UART0_CTS             IOID_19         /* CTS */
-#define CC1312R1_LAUNCHXL_UART0_RTS             IOID_18         /* RTS */
-#define CC1312R1_LAUNCHXL_UART1_RX              PIN_UNASSIGNED
-#define CC1312R1_LAUNCHXL_UART1_TX              PIN_UNASSIGNED
+#define CC1312R1_LAUNCHXL_UART0_RX              CC1312R1_LAUNCHXL_DIO12  /* RXD */
+#define CC1312R1_LAUNCHXL_UART0_TX              CC1312R1_LAUNCHXL_DIO15  /* TXD */
+#define CC1312R1_LAUNCHXL_UART0_CTS             IOID_19                  /* CTS */
+#define CC1312R1_LAUNCHXL_UART0_RTS             IOID_18                  /* RTS */
+#define CC1312R1_LAUNCHXL_UART1_RX              IOID_2                   /* RXD */
+#define CC1312R1_LAUNCHXL_UART1_TX              IOID_3                   /* TXD */
 #define CC1312R1_LAUNCHXL_UART1_CTS             PIN_UNASSIGNED
 #define CC1312R1_LAUNCHXL_UART1_RTS             PIN_UNASSIGNED
 /* For backward compatibility */
