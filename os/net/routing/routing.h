@@ -98,7 +98,7 @@ struct routing_driver {
   /**
    * Leave the network the node is part of
    *
-  */
+   */
   void (* leave_network)(void);
   /**
    * Tells whether the node is currently part of a network
