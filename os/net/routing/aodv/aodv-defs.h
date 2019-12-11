@@ -103,16 +103,17 @@ struct aodv_msg_rreq {
     uint32_t rreq_id;         /*!< A sequence number uniquely identifying the
                                    particular RREQ when taken in conjunction with the
                                    originating node's IP address.*/
-    uip_ipaddr_t dest_addr;   /*!< The IP address of the destination for which a route
-                                   is desired. Note: This is an IPv6 address */
     uint32_t dest_seqno;      /*!< The latest sequence number received in the past
                                    by the originator for any route towards the
                                    destination. */
-    uip_ipaddr_t orig_addr;   /*!< The IP address of the node which originated the
-                                   Route Request. */
     uint32_t orig_seqno;      /*!< The current sequence number to be used in the route
                                    entry pointing towards the originator of the route
                                    request. */
+    uip_ipaddr_t dest_addr;   /*!< The IP address of the destination for which a route
+                                   is desired. Note: This is an IPv6 address */
+    uip_ipaddr_t orig_addr;   /*!< The IP address of the node which originated the
+                                   Route Request. */
+
 };
 
 typedef struct aodv_msg_rreq aodv_msg_rreq_t; /*!< AODV Route Request message type. */
@@ -138,10 +139,10 @@ struct aodv_msg_rrep {
                                   to the Destination IP Address.  For multicast route
                                   requests this indicates the number of hops to the
                                   multicast tree member sending the RREP. */
+    uint32_t dest_seqno;     /*!< The destination sequence number associated to the
+                                  route. */
     uip_ipaddr_t dest_addr;  /*!< The IP address of the destination for which a route
                                   is supplied. */
-    uint32_t dest_seqno;      /*!< The destination sequence number associated to the
-                                  route. */
     uip_ipaddr_t orig_addr;
     uint32_t lifetime;       /*!< The time in milliseconds for which nodes receiving
                                   the RREP consider the route to be valid. */
