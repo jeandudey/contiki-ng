@@ -54,7 +54,7 @@
 #include "aodv-defs.h"
 #include "aodv-rt.h"
 
-#define LOG_MODULE "aodv-routing"
+#define LOG_MODULE "aodv"
 #define LOG_LEVEL LOG_LEVEL_INFO
 
 static struct uip_udp_conn *multicast_conn;
@@ -81,7 +81,9 @@ void aodv_routing_init(void)
 static CC_INLINE uint32_t
 last_known_seqno(uip_ipaddr_t *host)
 {
-    aodv_rt_entry_t *route = aodv_rt_lookup_any(host);
+    aodv_rt_entry_t *route = NULL;
+
+    route = aodv_rt_lookup_any(host);
 
     if (route != NULL) {
         /* Convert the sequence number to network byte order. */
@@ -93,8 +95,8 @@ last_known_seqno(uip_ipaddr_t *host)
 }
 
 
-static uint32_t rreq_id;   /*!< Current RREQ ID */
-static uint32_t my_hseqno; /*!< In host byte order! */
+static uint32_t rreq_id = 0;   /*!< Current RREQ ID */
+static uint32_t my_hseqno = 0; /*!< In host byte order! */
 
 #if 0
 static struct {
@@ -141,42 +143,42 @@ sendto(const uip_ipaddr_t *dest, const void *buf, int len)
 #endif
 
 void
-send_rreq(uip_ipaddr_t *addr)
+aodv_send_rreq(uip_ipaddr_t *addr)
 {
-    aodv_msg_rreq_t *rm = (aodv_msg_rreq_t *)uip_appdata;
-    int len;
+    aodv_msg_rreq_t rm = {0};
+    int len = 0;
 
     LOG_INFO("sending RREQ\n");
 
-    rm->type = AODV_TYPE_RREQ;
-    rm->dest_seqno = last_known_seqno(addr);
-    if (rm->dest_seqno == 0) {
-        LOG_INFO("Unknown sequence number");
-        rm->flags = AODV_RREQ_FLAG_UNKSEQNO;
+    rm.type = AODV_TYPE_RREQ;
+    rm.dest_seqno = last_known_seqno(addr);
+    if (rm.dest_seqno == 0) {
+        LOG_INFO("Unknown sequence number\n");
+        rm.flags = AODV_RREQ_FLAG_UNKSEQNO;
     } else {
-        rm->flags = 0;
+        rm.flags = 0;
     }
 
-    rm->reserved = 0;
-    rm->hop_count = 0;
-    rm->rreq_id = uip_htonl(rreq_id);
+    rm.reserved = 0;
+    rm.hop_count = 0;
+    rm.rreq_id = uip_htonl(rreq_id);
     /* Increment RREQ ID because the current is already used. */
     rreq_id += 1;
 
-    uip_ipaddr_copy(&rm->dest_addr, addr);
-    /*TODO: how to get orig_addr? uip_ipaddr_copy(&rm->orig_addr, aodv_multicast_addr);*/
+    uip_ipaddr_copy(&rm.dest_addr, addr);
+    uip_ipaddr_copy(&rm.orig_addr, &UIP_IP_BUF->srcipaddr);
 
     /* Always. */
     my_hseqno += 1;
-    rm->orig_seqno = uip_htonl(my_hseqno);
+    rm.orig_seqno = uip_htonl(my_hseqno);
     multicast_conn->ttl = AODV_NET_DIAMETER;
 
     len = sizeof(aodv_msg_rreq_t);
-    uip_udp_packet_send(multicast_conn, rm, len);
+    uip_udp_packet_send(multicast_conn, &rm, len);
 }
 
 void
-send_rrep(uip_ipaddr_t *dest, uip_ipaddr_t *nexthop, uip_ipaddr_t *orig,
+aodv_send_rrep(uip_ipaddr_t *dest, uip_ipaddr_t *nexthop, uip_ipaddr_t *orig,
       uint32_t *seqno, unsigned hop_count)
 {
 #if 0
@@ -196,7 +198,7 @@ send_rrep(uip_ipaddr_t *dest, uip_ipaddr_t *nexthop, uip_ipaddr_t *orig,
 }
 
 void
-send_rerr(uip_ipaddr_t *addr, uint32_t *seqno)
+aodv_send_rerr(uip_ipaddr_t *addr, uint32_t *seqno)
 {
 #if 0
     aodv_msg_rerr_t *rm = (aodv_msg_rerr_t *)uip_appdata;
@@ -309,13 +311,19 @@ PROCESS_THREAD(aodv_process, ev, data)
 
     PROCESS_BEGIN();
 
+    LOG_INFO("Creating multicast connection.\n");
+    LOG_INFO("Multicast port: %d\n", AODV_UDPPORT);
     multicast_conn = udp_broadcast_new(UIP_HTONS(AODV_UDPPORT), NULL);
+
+    LOG_INFO("Creating unicast UDP connection.\n");
+    LOG_INFO("Unicast port: %d\n", AODV_UDPPORT);
     unicastconn = udp_broadcast_new(UIP_HTONS(AODV_UDPPORT), NULL);
 
     while (1) {
         PROCESS_WAIT_EVENT();
 
         if (ev == tcpip_event) {
+            LOG_INFO("New TCPIP event");
             if (uip_newdata()) {
                 handle_incoming_packet();
                 continue;
@@ -324,9 +332,9 @@ PROCESS_THREAD(aodv_process, ev, data)
             if (uip_poll()) {
                 if(command == COMMAND_SEND_RREQ) {
                     if (aodv_rt_lookup(&rreq_addr) == NULL)
-                        send_rreq(&rreq_addr);
+                        aodv_send_rreq(&rreq_addr);
                 } else if (command == COMMAND_SEND_RERR) {
-                    send_rerr(&bad_dest, &bad_seqno);
+                    aodv_send_rerr(&bad_dest, &bad_seqno);
                 }
 
                 command = COMMAND_NONE;

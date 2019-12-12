@@ -59,16 +59,16 @@ void aodv_routing_init(void);
 /**
  * \brief Send a RREQ
  */
-void send_rreq(uip_ipaddr_t *addr);
+void aodv_send_rreq(uip_ipaddr_t *addr);
 
 /**
  * \brief Send a RREP
  */
-void send_rrep(uip_ipaddr_t *dest, uip_ipaddr_t *nexthop, uip_ipaddr_t *orig, uint32_t *seqno, unsigned hop_count);
+void aodv_send_rrep(uip_ipaddr_t *dest, uip_ipaddr_t *nexthop, uip_ipaddr_t *orig, uint32_t *seqno, unsigned hop_count);
 
 /**
  * \brief Send a RERR
  */
-void send_rerr(uip_ipaddr_t *addr, uint32_t *seqno);
+void aodv_send_rerr(uip_ipaddr_t *addr, uint32_t *seqno);
 
 #endif /* AODV_AODV_H_ */

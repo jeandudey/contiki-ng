@@ -58,13 +58,15 @@
 LIST(route_table);
 MEMB(route_mem, aodv_rt_entry_t, AODV_NUM_RT_ENTRIES);
 
-void aodv_rt_init(void)
+void
+aodv_rt_init(void)
 {
     list_init(route_table);
     memb_init(&route_mem);
 }
 
-aodv_rt_entry_t *aodv_rt_add(uip_ipaddr_t *dest, uip_ipaddr_t *nexthop, unsigned hop_count, const uint32_t *seqno)
+aodv_rt_entry_t *
+aodv_rt_add(uip_ipaddr_t *dest, uip_ipaddr_t *nexthop, unsigned hop_count, const uint32_t *seqno)
 {
     aodv_rt_entry_t *e;
 
@@ -93,9 +95,10 @@ aodv_rt_entry_t *aodv_rt_add(uip_ipaddr_t *dest, uip_ipaddr_t *nexthop, unsigned
     return e;
 }
 
-aodv_rt_entry_t *aodv_rt_lookup_any(uip_ipaddr_t *dest)
+aodv_rt_entry_t *
+aodv_rt_lookup_any(uip_ipaddr_t *dest)
 {
-    aodv_rt_entry_t *e;
+    aodv_rt_entry_t *e = NULL;
 
     /* Iterate over the list. */
     for(e = list_head(route_table); e != NULL; e = e->next) {
@@ -108,7 +111,8 @@ aodv_rt_entry_t *aodv_rt_lookup_any(uip_ipaddr_t *dest)
     return NULL;
 }
 
-aodv_rt_entry_t *aodv_rt_lookup(uip_ipaddr_t *dest)
+aodv_rt_entry_t *
+aodv_rt_lookup(uip_ipaddr_t *dest)
 {
     aodv_rt_entry_t *e;
 
