@@ -49,6 +49,7 @@
 #define AODV_AODV_H_
 
 #include "net/ipv6/uip.h"
+#include "net/routing/aodv/aodv-rt.h"
 
 /**
  * \brief Initialize AODV routing.
@@ -57,18 +58,16 @@
 void aodv_routing_init(void);
 
 /**
- * \brief Send a RREQ
+ * \brief Request a route to host.
+ *
+ * \attention 1. If the route is stored on the Routing Table, it doesn't check
+ * if it's bad.
+ *
+ * \param[in] host: Host address.
+ *
+ * \return NULL if the route is not on Routing Table, otherwise an entry in the
+ * Routing Table.
  */
-void aodv_send_rreq(uip_ipaddr_t *addr);
-
-/**
- * \brief Send a RREP
- */
-void aodv_send_rrep(uip_ipaddr_t *dest, uip_ipaddr_t *nexthop, uip_ipaddr_t *orig, uint32_t *seqno, unsigned hop_count);
-
-/**
- * \brief Send a RERR
- */
-void aodv_send_rerr(uip_ipaddr_t *addr, uint32_t *seqno);
+aodv_rt_entry_t *aodv_request_route_to(uip_ipaddr_t *host);
 
 #endif /* AODV_AODV_H_ */

@@ -1526,6 +1526,18 @@ uip_process(uint8_t flag)
   for(uip_udp_conn = &uip_udp_conns[0];
       uip_udp_conn < &uip_udp_conns[UIP_UDP_CONNS];
       ++uip_udp_conn) {
+      LOG_INFO("ripaddr = ");
+      LOG_INFO_6ADDR(&uip_udp_conn->ripaddr);
+      LOG_INFO_("\n");
+      LOG_INFO("lport = %d\n", uip_udp_conn->lport);
+      LOG_INFO("rport = %d\n", uip_udp_conn->rport);
+      LOG_INFO("ttl = %d\n", uip_udp_conn->ttl);
+
+      LOG_INFO("b.ripaddr = ");
+      LOG_INFO_6ADDR(&UIP_IP_BUF->destipaddr);
+      LOG_INFO_("\n");
+      LOG_INFO("b.lport = %d\n", UIP_UDP_BUF->destport);
+      LOG_INFO("b.rport = %d\n",UIP_UDP_BUF->srcport);
     /* If the local UDP port is non-zero, the connection is considered
        to be used. If so, the local port number is checked against the
        destination port number in the received packet. If the two port
@@ -1538,7 +1550,7 @@ uip_process(uint8_t flag)
        (uip_udp_conn->rport == 0 ||
         UIP_UDP_BUF->srcport == uip_udp_conn->rport) &&
        (uip_is_addr_unspecified(&uip_udp_conn->ripaddr) ||
-        uip_ipaddr_cmp(&UIP_IP_BUF->srcipaddr, &uip_udp_conn->ripaddr))) {
+        uip_ipaddr_cmp(&UIP_IP_BUF->destipaddr, &uip_udp_conn->ripaddr))) {
       goto udp_found;
     }
   }
