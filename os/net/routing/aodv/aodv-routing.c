@@ -57,11 +57,11 @@
 #define LOG_MODULE "aodv"
 #define LOG_LEVEL LOG_LEVEL_INFO
 
-static struct uip_udp_conn *multicast_conn;
-static struct uip_udp_conn *unicastconn;
-
 PROCESS(aodv_process, "AODV");
-
+/*---------------------------------------------------------------------------*/
+static struct uip_udp_conn* multicast_tx_conn; /* Used to send multicast packets */
+static struct uip_udp_conn* multicast_rx_conn; /* Used to receive multicast packets */
+static struct uip_udp_conn* unicast_tx_conn;   /* Used to send unicast packets */
 /*---------------------------------------------------------------------------*/
 void aodv_routing_init(void)
 {
@@ -134,9 +134,9 @@ sendto(const uip_ipaddr_t *dest, const void *buf, int len)
      but it is currently nicer than the alternative (requesting a new
      poll, and remembering the state, etc.). */
 
-  uip_ipaddr_copy(&unicastconn->ripaddr, dest);
-  uip_udp_conn = unicastconn;
-  uip_udp_packet_send(unicastconn, buf, len);
+  uip_ipaddr_copy(&unicast_tx_conn->ripaddr, dest);
+  uip_udp_conn = unicast_tx_conn;
+  uip_udp_packet_send(unicast_tx_conn, buf, len);
 }
 /*---------------------------------------------------------------------------*/
 void
@@ -160,22 +160,24 @@ aodv_send_rreq(uip_ipaddr_t *addr)
     rm.rreq_id = uip_htonl(rreq_id);
     /* Increment RREQ ID because the current is already used. */
     rreq_id += 1;
+    rm.orig_seqno = uip_htonl(my_hseqno);
 
     uip_ipaddr_copy(&rm.dest_addr, addr);
-    /* TODO: How to get orig_addr? */
-    uip_ipaddr_copy(&rm.orig_addr, &UIP_IP_BUF->srcipaddr);
+    uip_ipaddr_copy(&rm.orig_addr, &multicast_tx_conn->ripaddr);
 
     /* Always. */
     my_hseqno += 1;
 
-    rm.orig_seqno = uip_htonl(my_hseqno);
-    multicast_conn->ttl = AODV_NET_DIAMETER;
-
-    uip_udp_packet_send(multicast_conn, &rm, sizeof(aodv_msg_rreq_t));
+    multicast_tx_conn->ttl = AODV_NET_DIAMETER;
+    uip_udp_packet_send(multicast_tx_conn, &rm, sizeof(aodv_msg_rreq_t));
 }
 /*---------------------------------------------------------------------------*/
 void
-aodv_send_rrep(uip_ipaddr_t *dest, uip_ipaddr_t *nexthop, uip_ipaddr_t *orig, uint32_t *seqno, unsigned hop_count)
+aodv_send_rrep(uip_ipaddr_t *dest,
+               uip_ipaddr_t *nexthop,
+               uip_ipaddr_t *orig,
+               uint32_t *seqno,
+               unsigned hop_count)
 {
     aodv_msg_rrep_t rm = {0};
 
@@ -183,9 +185,9 @@ aodv_send_rrep(uip_ipaddr_t *dest, uip_ipaddr_t *nexthop, uip_ipaddr_t *orig, ui
     rm.flags = 0;
     rm.prefix_sz = 0;
     rm.hop_count = hop_count;
-    uip_ipaddr_copy(&rm.orig_addr, orig);
     rm.dest_seqno = *seqno;
     uip_ipaddr_copy(&rm.dest_addr, dest);
+    uip_ipaddr_copy(&rm.orig_addr, orig);
     rm.lifetime = UIP_HTONL(AODV_ROUTE_TIMEOUT);
 
     sendto(nexthop, &rm, sizeof(aodv_msg_rrep_t));
@@ -203,7 +205,7 @@ aodv_send_rerr(uip_ipaddr_t *addr, uint32_t *seqno)
     rm.unreach[0].seqno = *seqno;
     rm.flags = 0;
 
-    uip_udp_packet_send(multicast_conn, &rm, sizeof(aodv_msg_rerr_t));
+    uip_udp_packet_send(multicast_tx_conn, &rm, sizeof(aodv_msg_rerr_t));
 }
 /*---------------------------------------------------------------------------*/
 static void
@@ -211,18 +213,33 @@ handle_incoming_rreq(void)
 {
     LOG_INFO("Handling incoming RREP.\n");
 
+    /*
+     * Defensive coding. uip_appdata SHOULD be valid here, but
+     * we test to avoid crashes at runtime.
+     */
     if(uip_appdata == NULL) {
         LOG_ERR("RREQ has no data.\n");
         return;
     }
 
-    if(uip_len < sizeof(aodv_msg_rreq_t)) {
-        LOG_ERR("RREQ is too short, is %d expected at least %d.\n", uip_len, sizeof(aodv_msg_rreq_t));
+    /*
+     * Check the length of the packet, if doesn't met the needed
+     * size we don't process it. It can be larger, but we don't
+     * worry about any extra bytes.
+     */
+    if(uip_datalen() < sizeof(aodv_msg_rreq_t)) {
+        LOG_ERR("RREQ is too short, is %d expected at least %d.\n",
+                uip_len,
+                sizeof(aodv_msg_rreq_t));
         return;
     }
 
     aodv_msg_rreq_t *rm = (aodv_msg_rreq_t *)uip_appdata;
 
+    /*
+     * Defensive coding. This is already checked by handle_incoming_packet.
+     * Anyway it's checked here to avoid a misuse of the function.
+     */
     if(rm->type != AODV_TYPE_RREQ) {
         LOG_ERR("Invalid AODV message type.\n");
         return;
@@ -239,7 +256,7 @@ handle_incoming_rrep(void)
         return;
     }
 
-    if(uip_len < sizeof(aodv_msg_rrep_t)) {
+    if(uip_datalen() < sizeof(aodv_msg_rrep_t)) {
         LOG_ERR("RREP is too short, is %d expected at least %d.\n", uip_len, sizeof(aodv_msg_rrep_t));
         return;
     }
@@ -310,11 +327,12 @@ static enum {
     COMMAND_SEND_RREQ,
     COMMAND_SEND_RERR,
 } command;
-
+/*---------------------------------------------------------------------------*/
 static uip_ipaddr_t bad_dest;
 static uint32_t bad_seqno;      /* In network byte order! */
-
-void aodv_bad_dest(uip_ipaddr_t *dest)
+/*---------------------------------------------------------------------------*/
+void
+aodv_bad_dest(uip_ipaddr_t *dest)
 {
     aodv_rt_entry_t *rt = aodv_rt_lookup_any(dest);
 
@@ -329,11 +347,12 @@ void aodv_bad_dest(uip_ipaddr_t *dest)
     command = COMMAND_SEND_RERR;
     process_post(&aodv_process, PROCESS_EVENT_MSG, NULL);
 }
-
+/*---------------------------------------------------------------------------*/
 static uip_ipaddr_t rreq_addr;
 static struct timer next_time;
-
-aodv_rt_entry_t *aodv_request_route_to(uip_ipaddr_t *host)
+/*---------------------------------------------------------------------------*/
+aodv_rt_entry_t *
+aodv_request_route_to(uip_ipaddr_t *host)
 {
     LOG_INFO("Requesting route to ");
     LOG_INFO_6ADDR(host);
@@ -375,25 +394,41 @@ PROCESS_THREAD(aodv_process, ev, data)
 
     PROCESS_BEGIN();
 
-    LOG_INFO("Creating multicast connection.\n");
-    LOG_INFO("Multicast port: %d\n", AODV_UDPPORT);
-    multicast_conn = udp_broadcast_new(UIP_HTONS(AODV_UDPPORT), NULL);
-    LOG_INFO("ripaddr = ");
-    LOG_INFO_6ADDR(&multicast_conn->ripaddr);
-    LOG_INFO_("\n");
-    LOG_INFO("lport = %d\n", multicast_conn->lport);
-    LOG_INFO("rport = %d\n", multicast_conn->rport);
-    LOG_INFO("ttl = %d\n", multicast_conn->ttl);
+    /*
+     * Create broadcast UDP connection to send packets to the ff02::1,
+     * This connection is ONLY to send packets, it doesn't receive anything.
+     */
+    multicast_tx_conn = udp_broadcast_new(UIP_HTONS(AODV_UDPPORT), NULL);
 
-    LOG_INFO("Creating unicast UDP connection.\n");
-    LOG_INFO("Unicast port: %d\n", AODV_UDPPORT);
-    unicastconn = udp_broadcast_new(UIP_HTONS(AODV_UDPPORT), NULL);
+    /*
+     * Create a UDP connection to receive (RX) packets sent to a ff02:1 address.
+     * This connection is ONLY to receive packets, it SHOULD NOT be used to
+     * send anything as it does not has a Remote Address.
+     */
+    multicast_rx_conn = udp_new(NULL, 0, NULL);
+    if(multicast_rx_conn == NULL) {
+        LOG_ERR("Couldn't create multicast connection.\n");
+        PROCESS_EXIT();
+    }
+    /*
+     * Bind the connection to the AODV UDP port (per the RFC it's 654).
+     */
+    udp_bind(multicast_rx_conn, UIP_HTONS(AODV_UDPPORT));
+
+    /*
+     * Create a unicast connection, acually the address is changed to the address of
+     * the node that the response should be sent.
+     */
+    unicast_tx_conn = udp_broadcast_new(UIP_HTONS(AODV_UDPPORT), NULL);
 
     while (1) {
         PROCESS_WAIT_EVENT();
 
         if (ev == tcpip_event) {
             LOG_INFO("New TCPIP event\n");
+            /*
+             * Check if we have received any UDP data.
+             */
             if (uip_newdata()) {
                 LOG_INFO("Received UDP datagram\n");
                 handle_incoming_packet();
@@ -403,19 +438,26 @@ PROCESS_THREAD(aodv_process, ev, data)
             if (uip_poll()) {
                 if(command == COMMAND_SEND_RREQ) {
                     LOG_INFO("Received COMMAND_SEND_RREQ\n");
+                    /*
+                     * Search in the Routing Table if we have that address stored,
+                     * if not, send RREQs to all near nodes.
+                     */
                     if (aodv_rt_lookup(&rreq_addr) == NULL)
                         aodv_send_rreq(&rreq_addr);
                 } else if (command == COMMAND_SEND_RERR) {
                     aodv_send_rerr(&bad_dest, &bad_seqno);
                 }
 
+                /*
+                 * Reset the command state.
+                 */
                 command = COMMAND_NONE;
                 continue;
             }
         }
 
         if (ev == PROCESS_EVENT_MSG) {
-            tcpip_poll_udp(multicast_conn);
+            tcpip_poll_udp(multicast_rx_conn);
         }
     }
 
@@ -423,10 +465,14 @@ exit:
     command = COMMAND_NONE;
     aodv_rt_flush_all();
 
-    uip_udp_remove(multicast_conn);
-    multicast_conn = NULL;
+    uip_udp_remove(multicast_tx_conn);
+    multicast_tx_conn = NULL;
 
-    uip_udp_remove(unicastconn);
-    unicastconn = NULL;
+    uip_udp_remove(multicast_rx_conn);
+    multicast_rx_conn = NULL;
+
+    uip_udp_remove(unicast_tx_conn);
+    unicast_tx_conn = NULL;
+
     PROCESS_END();
 }
