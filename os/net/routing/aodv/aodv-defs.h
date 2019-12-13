@@ -57,10 +57,6 @@
 /* AODV includes */
 #include "aodv-conf.h"
 
-/* TODO: is this value ok for link local? */
-#define aodv_create_linklocal_mcast(addr)   \
-  uip_ip6addr((addr), 0xFF03,0,0,0,0,0,0,0xFC)
-
 #define AODV_TYPE_RREQ 1     /*!< RREQ message. */
 #define AODV_TYPE_RREP 2     /*!< RREP message. */
 #define AODV_TYPE_RERR 3     /*!< RERR message. */

@@ -24,18 +24,11 @@
 #define LOG_MODULE "aodv"
 #define LOG_LEVEL LOG_LEVEL_DBG
 
-/* Multicast address. */
-uip_ipaddr_t aodv_multicast_addr;
-
 /*---------------------------------------------------------------------------*/
 static void
 init(void)
 {
     LOG_INFO("Initializing AODV routing driver.\n");
-
-    /* Initialize multicast address */
-    aodv_create_linklocal_mcast(&aodv_multicast_addr);
-    uip_ds6_maddr_add(&aodv_multicast_addr);
 
     LOG_INFO("Initializing AODV routing table.\n");
     aodv_rt_init();
