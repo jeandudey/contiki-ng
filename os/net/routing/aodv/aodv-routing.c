@@ -45,6 +45,7 @@
  * @license Apache 2.0, see LICENSE file for details
  */
 
+#include "net/ipv6/uip-ds6.h"
 #include "net/ipv6/uip.h"
 #include "sys/process.h"
 #include "sys/log.h"
@@ -52,6 +53,7 @@
 #include "aodv-routing.h"
 #include "aodv-conf.h"
 #include "aodv-defs.h"
+#include "aodv-fwc.h"
 #include "aodv-rt.h"
 
 #define LOG_MODULE "aodv"
@@ -97,31 +99,7 @@ last_known_seqno(uip_ipaddr_t *host)
 /*---------------------------------------------------------------------------*/
 static uint32_t rreq_id = 0;   /*!< Current RREQ ID */
 static uint32_t my_hseqno = 0; /*!< In host byte order! */
-/*---------------------------------------------------------------------------*/
-#if 0
-static struct {
-    uip_ipaddr_t orig;
-    uint32_t id;
-} fwcache[AODV_NUM_FW_CACHE];
 
-static CC_INLINE int
-fwc_lookup(const uip_ipaddr_t *orig, const uint32_t *id)
-{
-    /* TODO: analyze this modulo reduction. See above comment. */
-    unsigned n = (orig->u8[2] + orig->u8[3]) % AODV_NUM_FW_CACHE;
-    return fwcache[n].id == *id && uip_ipaddr_cmp(&fwcache[n].orig, orig);
-}
-
-static CC_INLINE void
-fwc_add(const uip_ipaddr_t *orig, const uint32_t *id)
-{
-    /* TODO: analyze this modulo reduction. Possible security issue. */
-    unsigned n = (orig->u8[2] + orig->u8[3]) % AODV_NUM_FW_CACHE;
-    fwcache[n].id = *id;
-    uip_ipaddr_copy(&fwcache[n].orig, orig);
-}
-#endif
-/*---------------------------------------------------------------------------*/
 #define uip_udp_sender() (&(UIP_IP_BUF->srcipaddr))
 /*---------------------------------------------------------------------------*/
 static void
@@ -147,6 +125,7 @@ aodv_send_rreq(uip_ipaddr_t *addr)
     LOG_INFO("sending RREQ.\n");
 
     rm.type = AODV_TYPE_RREQ;
+
     rm.dest_seqno = last_known_seqno(addr);
     if (rm.dest_seqno == 0) {
         LOG_INFO("Unknown sequence number\n");
@@ -161,9 +140,11 @@ aodv_send_rreq(uip_ipaddr_t *addr)
     /* Increment RREQ ID because the current is already used. */
     rreq_id += 1;
     rm.orig_seqno = uip_htonl(my_hseqno);
+    
+    uip_ds6_addr_t* lladdr = uip_ds6_get_link_local(-1);
 
     uip_ipaddr_copy(&rm.dest_addr, addr);
-    uip_ipaddr_copy(&rm.orig_addr, &multicast_tx_conn->ripaddr);
+    uip_ipaddr_copy(&rm.orig_addr, &lladdr->ipaddr);
 
     /* Always. */
     my_hseqno += 1;
@@ -245,7 +226,101 @@ handle_incoming_rreq(void)
         return;
     }
 
-    /* TODO: handle RREQ logic */
+    uip_ds6_addr_t *lladdr = uip_ds6_get_link_local(-1);
+
+    LOG_INFO("RREQ from ");
+    LOG_INFO_6ADDR(&UIP_IP_BUF->srcipaddr);
+    LOG_INFO_(" to ");
+    LOG_INFO_6ADDR(&UIP_IP_BUF->destipaddr);
+    LOG_INFO_(" ttl=%u ", UIP_IP_BUF->ttl);
+    LOG_INFO_("orig=");
+    LOG_INFO_6ADDR(&rm->orig_addr);
+    LOG_INFO_(" seq=%lu ", uip_ntohl(rm->orig_seqno));
+    LOG_INFO_("hops=%u ", rm->hop_count);
+    LOG_INFO_("dest=");
+    LOG_INFO_6ADDR(&rm->dest_addr);
+    LOG_INFO_("seq=%lu\n", uip_ntohl(rm->dest_seqno));
+
+    aodv_rt_entry_t *rt = NULL;
+    aodv_rt_entry_t *fw = NULL;
+
+    /*
+     * Check if we have this route stored, and verify that:
+     *
+     * 1. It's a new route.
+     * 2. Or it is a better route (has less hops).
+     */
+    rt = aodv_rt_lookup(&rm->orig_addr);
+    if(rt == NULL
+       || (SCMP32(uip_ntohl(rm->orig_seqno), rt->hseqno) > 0) /* New route. */
+       || (SCMP32(uip_ntohl(rm->orig_seqno), rt->hseqno) == 0
+       && rm->hop_count < rt->hop_count)) { /* Better route. */
+        LOG_INFO("RREQ is a new route.\n");
+        rt = aodv_rt_add(&rm->orig_addr, uip_udp_sender(),
+                         rm->hop_count, &rm->orig_seqno);
+    }
+
+    /*
+     * Check if it is for our address or a fresh route.
+     *
+     * XXX: we currently don't set the DESTONLY flag when sending RREQs.
+     */
+    if(uip_ipaddr_cmp(&rm->dest_addr, &lladdr->ipaddr)
+       || rm->flags & AODV_RREQ_FLAG_DESTONLY) {
+        LOG_INFO("RREQ is for out address.\n");
+        fw = NULL;
+    } else {
+        /* Check if we have a route to dest_addr */
+        fw = aodv_rt_lookup(&rm->dest_addr);
+        if(!(rm->flags & AODV_RREQ_FLAG_UNKSEQNO)
+           && fw != NULL
+           && SCMP32(fw->hseqno, uip_ntohl(rm->dest_seqno)) <= 0) {
+            fw = NULL;
+        }
+    }
+
+    uip_ipaddr_t dest_addr = {0};
+    uip_ipaddr_t orig_addr = {0};
+
+    /* If we have a route to dest_addr, send the RREP back */
+    if (fw != NULL) {
+        LOG_INFO("Route found! sending RREP.\n");
+        uint32_t net_seqno = 0;
+
+        uip_ipaddr_copy(&dest_addr, &rm->dest_addr);
+        uip_ipaddr_copy(&orig_addr, &rm->orig_addr);
+
+        net_seqno = uip_htonl(fw->hseqno);
+
+        aodv_send_rrep(&dest_addr, &rt->nexthop, &orig_addr, &net_seqno, fw->hop_count + 1);
+    } else if(uip_ipaddr_cmp(&rm->dest_addr, &lladdr->ipaddr)) {
+        LOG_INFO("RREQ is for our address.");
+        uint32_t net_seqno = 0;
+
+        uip_ipaddr_copy(&dest_addr, &rm->dest_addr);
+        uip_ipaddr_copy(&orig_addr, &rm->orig_addr);
+
+        my_hseqno += 1;
+        if(!(rm->flags & AODV_RREQ_FLAG_UNKSEQNO)
+          && SCMP32(my_hseqno, uip_ntohl(rm->dest_seqno)) < 0) {
+            my_hseqno = uip_ntohl(rm->dest_seqno) + 1;
+        }
+        net_seqno = uip_htonl(my_hseqno);
+        aodv_send_rrep(&dest_addr, &rt->nexthop, &orig_addr, &net_seqno, 0);
+    } else if(UIP_IP_BUF->ttl > 1) {
+        LOG_INFO("Re-sending RREQ.\n");
+
+        /* Have we seen this RREQ before? */
+        if(aodv_fwc_lookup(&rm->orig_addr, &rm->rreq_id)) {
+            return;
+        }
+        aodv_fwc_add(&rm->orig_addr, &rm->rreq_id);
+
+        rm->hop_count += 1;
+        multicast_tx_conn->ttl = UIP_IP_BUF->ttl - 1;
+
+        uip_udp_packet_send(multicast_tx_conn, rm, sizeof(aodv_msg_rreq_t));
+    }
 }
 /*---------------------------------------------------------------------------*/
 static void
@@ -279,7 +354,7 @@ handle_incoming_rerr(void)
         return;
     }
 
-    if(uip_len < sizeof(aodv_msg_rerr_t)) {
+    if(uip_datalen() < sizeof(aodv_msg_rerr_t)) {
         LOG_ERR("RERR is too short, is %d expected at least %d.\n", uip_len, sizeof(aodv_msg_rerr_t));
         return;
     }
@@ -302,7 +377,7 @@ handle_incoming_packet(void)
         return;
     }
 
-    if(uip_len < sizeof(aodv_msg_t)) {
+    if(uip_datalen() < sizeof(aodv_msg_t)) {
         LOG_ERR("AODV message is too short.\n");
         return;
     }
