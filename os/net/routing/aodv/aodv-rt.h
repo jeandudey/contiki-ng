@@ -31,18 +31,18 @@
  */
 
 /**
- * @file aodv-rt.h
- * @author Locha Mesh project developers (locha.io)
- * @brief Implementation of:
+ * \file aodv-rt.h
+ * \author Locha Mesh project developers (locha.io)
+ * \brief Implementation of:
  *
  *          Ad Hoc On-demand Distance Vector Version
  *            https://tools.ietf.org/html/rfc3561
  *
- * @version 0.1
- * @date 2019-12-10
+ * \version 0.1
+ * \date 2019-12-10
  *
- * @copyright Copyright (c) 2019 Locha Mesh project developers
- * @license Apache 2.0, see LICENSE file for details
+ * \copyright Copyright (c) 2019 Locha Mesh project developers
+ * \license Apache 2.0, see LICENSE file for details
  */
 #ifndef AODV_RT_H_
 #define AODV_RT_H_
@@ -54,66 +54,69 @@
 typedef struct aodv_rt_entry aodv_rt_entry_t; /*!< AODV routing table entry. */
 
 /**
- * @brief AODV routing table entry.
+ * \brief AODV routing table entry.
  *
  */
 struct aodv_rt_entry {
-    aodv_rt_entry_t* next; /*!< Next entry in the Routing Table. */
-    uip_ipaddr_t dest;     /*!< Destination. */
-    uip_ipaddr_t nexthop;  /*!< Next hop. */
-    uint32_t hseqno;       /*!< In host byte order! */
-    uint8_t hop_count;     /*!< Hop count. */
-    uint8_t is_bad;        /*!< Only one bit is used. */
+  aodv_rt_entry_t* next; /*!< Next entry in the Routing Table. */
+  uip_ipaddr_t dest;     /*!< Destination. */
+  uip_ipaddr_t nexthop;  /*!< Next hop. */
+  uint32_t hseqno;       /*!< In host byte order! */
+  uint8_t hop_count;     /*!< Hop count. */
+  uint8_t is_bad;        /*!< Only one bit is used. */
 };
 
 /**
- * @param Initailize Routing Table.
+ * \param Initailize Routing Table.
  */
 void aodv_rt_init(void);
 
 /**
- * @brief Add an entry to the Routing Table.
+ * \brief Add an entry to the Routing Table.
  *
- * @param dest: Destination address.
- * @param nexthop: Next hop.
- * @param hopcount: Hop count.
- * @param seqno: Sequence number.
+ * \param dest: Destination address.
+ * \param nexthop: Next hop.
+ * \param hopcount: Hop count.
+ * \param seqno: Sequence number.
  *
- * @return pointer to aodv_rt_entry_t.
+ * \return pointer to aodv_rt_entry_t.
  */
-aodv_rt_entry_t *aodv_rt_add(uip_ipaddr_t *dest, uip_ipaddr_t *nexthop, unsigned hop_count, const uint32_t *seqno);
+aodv_rt_entry_t *aodv_rt_add(uip_ipaddr_t *dest,
+                             uip_ipaddr_t *nexthop,
+                             unsigned hop_count,
+                             const uint32_t *seqno);
 
 /**
- * @brief Lookup for any entry by the destination address.
+ * \brief Lookup for any entry by the destination address.
  *
- * @param dest: Destination address.
+ * \param dest: Destination address.
  */
 aodv_rt_entry_t *aodv_rt_lookup_any(uip_ipaddr_t *dest);
 
 /**
- * @brief Look for an entry by the destination address. Checks if it's bad.
+ * \brief Look for an entry by the destination address. Checks if it's bad.
  *
- * @param dest: Destination address.
+ * \param dest: Destination address.
  *
- * @return pointer to aodv_rt_entry_t, or NULL if not found or if the entry is
+ * \return pointer to aodv_rt_entry_t, or NULL if not found or if the entry is
  * bad, if you want to get any entry use `aodv_rt_lookup_any`.
  */
 aodv_rt_entry_t *aodv_rt_lookup(uip_ipaddr_t *dest);
 
 /**
- * @brief Remove an entry from the Routing Table.
+ * \brief Remove an entry from the Routing Table.
  *
- * @param e: Entry.
+ * \param e: Entry.
  */
 void aodv_rt_remove(aodv_rt_entry_t *e);
 
 /**
- * @biref Set the entry as the Least Recently Used.
+ * \biref Set the entry as the Least Recently Used.
  */
 void aodv_rt_lru(aodv_rt_entry_t *e);
 
 /**
- * @brief Remove all table entries.
+ * \brief Remove all table entries.
  */
 void aodv_rt_flush_all(void);
 

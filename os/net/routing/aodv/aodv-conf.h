@@ -17,7 +17,8 @@
 #define AODV_CONF_H_
 
 #ifndef AODV_UDPPORT
-#define AODV_UDPPORT 654 /*! UDP port for AODV */
+/*! UDP port for AODV */
+#define AODV_UDPPORT 654
 #endif
 
 #ifndef AODV_NUM_RT_ENTRIES

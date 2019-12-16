@@ -1,5 +1,5 @@
 /**
- * \file aodv-defs.c
+ * \file aodv-fwc.c
  * \author Locha Mesh project developers (locha.io)
  * \brief AODV RREQ forward cache.
  * \version 0.1

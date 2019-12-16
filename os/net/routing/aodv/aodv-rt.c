@@ -61,92 +61,95 @@ MEMB(route_mem, aodv_rt_entry_t, AODV_NUM_RT_ENTRIES);
 void
 aodv_rt_init(void)
 {
-    list_init(route_table);
-    memb_init(&route_mem);
+  list_init(route_table);
+  memb_init(&route_mem);
 }
 
 aodv_rt_entry_t *
-aodv_rt_add(uip_ipaddr_t *dest, uip_ipaddr_t *nexthop, unsigned hop_count, const uint32_t *seqno)
+aodv_rt_add(uip_ipaddr_t *dest,
+            uip_ipaddr_t *nexthop,
+            unsigned hop_count,
+            const uint32_t *seqno)
 {
-    aodv_rt_entry_t *e;
+  aodv_rt_entry_t *e;
 
-    /* Avoid inserting duplicate entries. */
-    e = aodv_rt_lookup_any(dest);
-    if (e != NULL) {
-        list_remove(route_table, e);
-    } else {
-        /* Allocate a new entry or reuse the oldest. */
-        e = memb_alloc(&route_mem);
-        if(e == NULL) {
-            /* Remove oldest entry. */
-            e = list_chop(route_table);
-        }
+  /* Avoid inserting duplicate entries. */
+  e = aodv_rt_lookup_any(dest);
+  if (e != NULL) {
+    list_remove(route_table, e);
+  } else {
+    /* Allocate a new entry or reuse the oldest. */
+    e = memb_alloc(&route_mem);
+    if(e == NULL) {
+      /* Remove oldest entry. */
+      e = list_chop(route_table);
     }
+  }
 
-    uip_ipaddr_copy(&e->dest, dest);
-    uip_ipaddr_copy(&e->nexthop, nexthop);
-    e->hop_count = hop_count;
-    e->hseqno = uip_ntohl(*seqno);
-    e->is_bad = 0;
+  uip_ipaddr_copy(&e->dest, dest);
+  uip_ipaddr_copy(&e->nexthop, nexthop);
+  e->hop_count = hop_count;
+  e->hseqno = uip_ntohl(*seqno);
+  e->is_bad = 0;
 
-    /* New entry goes first because it's the Least Recently Used. */
-    list_push(route_table, e);
+  /* New entry goes first because it's the Least Recently Used. */
+  list_push(route_table, e);
 
-    return e;
+  return e;
 }
 
 aodv_rt_entry_t *
 aodv_rt_lookup_any(uip_ipaddr_t *dest)
 {
-    aodv_rt_entry_t *e = NULL;
+  aodv_rt_entry_t *e = NULL;
 
-    /* Iterate over the list. */
-    for(e = list_head(route_table); e != NULL; e = e->next) {
-        if(uip_ipaddr_cmp(dest, &e->dest)) {
-            return e;
-        }
+  /* Iterate over the list. */
+  for(e = list_head(route_table); e != NULL; e = e->next) {
+    if(uip_ipaddr_cmp(dest, &e->dest)) {
+      return e;
     }
+  }
 
-    /* Not found. */
-    return NULL;
+  /* Not found. */
+  return NULL;
 }
 
 aodv_rt_entry_t *
 aodv_rt_lookup(uip_ipaddr_t *dest)
 {
-    aodv_rt_entry_t *e;
+  aodv_rt_entry_t *e;
 
-    e = aodv_rt_lookup_any(dest);
-    if(e != NULL && e->is_bad)
-        return NULL;
+  e = aodv_rt_lookup_any(dest);
+  if(e != NULL && e->is_bad)
+    return NULL;
 
-    return e;
+  return e;
 }
 
 void aodv_rt_remove(aodv_rt_entry_t *e)
 {
-    list_remove(route_table, e);
-    memb_free(&route_mem, e);
+  list_remove(route_table, e);
+  memb_free(&route_mem, e);
 }
 
 void aodv_rt_lru(aodv_rt_entry_t *e)
 {
-    if(e != list_head(route_table)) {
-        list_remove(route_table, e);
-        list_push(route_table, e);
-    }
+  if(e != list_head(route_table)) {
+    list_remove(route_table, e);
+    list_push(route_table, e);
+  }
 }
 
 void aodv_rt_flush_all(void)
 {
-    aodv_rt_entry_t *e;
+  aodv_rt_entry_t *e;
 
-    while (1) {
-        e = list_pop(route_table);
-        if(e != NULL) {
-            memb_free(&route_mem, e);
-        } else {
-            break;
-        }
+  while (1) {
+    e = list_pop(route_table);
+    if(e != NULL) {
+      memb_free(&route_mem, e);
+    } else {
+      break;
+    }
   }
 }
