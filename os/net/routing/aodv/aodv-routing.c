@@ -172,6 +172,14 @@ aodv_send_rrep(uip_ipaddr_t *dest,
 {
   aodv_msg_rrep_t rm = {0};
 
+  LOG_INFO("Sending RREP ");
+  LOG_INFO_(" to ");
+  LOG_INFO_6ADDR(nexthop);
+  LOG_INFO_("hops=%u ", hop_count);
+  LOG_INFO_("dest=");
+  LOG_INFO_6ADDR(dest);
+  LOG_INFO_("seq=%lu\n", *seqno);
+
   rm.type = AODV_TYPE_RREP;
   rm.flags = 0;
   rm.prefix_sz = 0;
@@ -295,8 +303,8 @@ handle_incoming_rreq(void)
     LOG_INFO("Route found! sending RREP.\n");
     uint32_t net_seqno = 0;
 
-    uip_ipaddr_copy(&dest_addr, &rm->dest_addr);
-    uip_ipaddr_copy(&orig_addr, &rm->orig_addr);
+    uip_ip6addr_copy(&dest_addr, &rm->dest_addr);
+    uip_ip6addr_copy(&orig_addr, &rm->orig_addr);
 
     net_seqno = uip_htonl(fw->hseqno);
 
@@ -306,8 +314,8 @@ handle_incoming_rreq(void)
     LOG_INFO("RREQ is for our address.\n");
     uint32_t net_seqno = 0;
 
-    uip_ipaddr_copy(&dest_addr, &rm->dest_addr);
-    uip_ipaddr_copy(&orig_addr, &rm->orig_addr);
+    uip_ip6addr_copy(&dest_addr, &rm->dest_addr);
+    uip_ip6addr_copy(&orig_addr, &rm->orig_addr);
 
     my_hseqno += 1;
     if(!(rm->flags & AODV_RREQ_FLAG_UNKSEQNO)
@@ -315,6 +323,7 @@ handle_incoming_rreq(void)
       my_hseqno = uip_ntohl(rm->dest_seqno) + 1;
     }
     net_seqno = uip_htonl(my_hseqno);
+
     aodv_send_rrep(&dest_addr, &rt->nexthop, &orig_addr, &net_seqno, 0);
   } else if(UIP_IP_BUF->ttl > 1) {
     LOG_INFO("Re-sending RREQ.\n");
